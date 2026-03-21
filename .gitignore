@@ -24,6 +24,4 @@ out/
 Thumbs.db
 
 # Trivia Server Specific
-TriviaServer/history.json
-update_questions.py
-fetch_questions.py
+history.json
