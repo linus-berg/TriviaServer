@@ -1,0 +1,29 @@
+# .NET Core / Visual Studio
+bin/
+obj/
+out/
+[Bb]in/
+[Oo]bj/
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# Visual Studio Code
+.vscode/
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Trivia Server Specific
+TriviaServer/history.json
+update_questions.py
+fetch_questions.py
