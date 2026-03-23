@@ -17,7 +17,7 @@ public class TriviaService
 
     // Configuration for automated quiz
     private readonly DayOfWeek _scheduledDay = DayOfWeek.Friday;
-    private readonly TimeSpan _scheduledTime = new TimeSpan(14, 0, 0);
+    private readonly TimeSpan _scheduledTime = new TimeSpan(13, 0, 0);
 
     public GameState GameState { get; private set; } = new();
 
