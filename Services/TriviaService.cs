@@ -23,7 +23,7 @@ public class TriviaService
 
     public TriviaService(IConfiguration config)
     {
-        _questionDuration = config.GetValue<int>("QuizSettings:QuestionDurationSeconds", 20);
+        _questionDuration = config.GetValue<int>("QuizSettings:QuestionDurationSeconds", 15);
         
         // Load from env if available
         var envDay = Environment.GetEnvironmentVariable("QUIZ_DAY");
