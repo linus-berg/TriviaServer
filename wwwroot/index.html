@@ -293,6 +293,32 @@
         let localRemainingSeconds = 0;
         let timerInterval = null;
         let socket = null;
+        let authStatus = { authEnabled: false, name: null, isAdmin: true };
+
+        async function fetchAuthStatus() {
+            try {
+                const res = await fetch('/api/auth/status');
+                authStatus = await res.json();
+                
+                const usernameInput = document.getElementById('username');
+                if (authStatus.authEnabled) {
+                    if (authStatus.name) {
+                        usernameInput.value = authStatus.name;
+                    }
+                    usernameInput.disabled = true;
+                    usernameInput.placeholder = authStatus.name || "Authenticated";
+                }
+
+                const adminSection = document.querySelector('.admin-section');
+                if (!authStatus.isAdmin) {
+                    adminSection.style.display = 'none';
+                } else {
+                    adminSection.style.display = 'flex';
+                }
+            } catch (err) {
+                console.error("Failed to fetch auth status:", err);
+            }
+        }
 
         function initWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -421,7 +447,11 @@
         }
 
         async function submitAnswer(letter) {
-            const username = document.getElementById('username').value;
+            let username = document.getElementById('username').value;
+            if (authStatus.authEnabled && authStatus.name) {
+                username = authStatus.name;
+            }
+
             if (!username) { alert("Enter name!"); return; }
             const feedback = document.getElementById('feedback');
             const res = await fetch('/api/answer', {
@@ -440,6 +470,7 @@
         async function startNewGame() { await fetch('/api/admin/start', { method: 'POST' }); }
         async function nextQuestion() { await fetch('/api/admin/next', { method: 'POST' }); }
 
+        fetchAuthStatus();
         initWebSocket();
     </script>
 </body>
