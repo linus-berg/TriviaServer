@@ -336,8 +336,13 @@
                 <input type="text" id="username" placeholder="Your display name..." />
             </div>
             
-            <div id="game-area">
-                <h2 id="status-msg">Waiting for the Game Master...</h2>
+                <div id="game-area">
+                    <div id="countdown-section" style="display:none; margin-bottom: 20px;">
+                        <div style="background: #000; color: #fff; padding: 5px 15px; display: inline-block; font-weight: 900; text-transform: uppercase; transform: rotate(-2deg); margin-bottom: 10px;">Next Quiz Starts In:</div>
+                        <div id="next-quiz-countdown" style="font-size: 2.5rem; font-weight: 900; color: #ef4444; -webkit-text-stroke: 1.5px #000; text-shadow: 4px 4px 0px #000;">--:--:--</div>
+                    </div>
+                    
+                    <h2 id="status-msg">Waiting for the Game Master...</h2>
 
                 <div id="winners-display" style="display:none;" class="fade-in">
                     <h2 style="color: var(--warning);"><i class="fas fa-crown"></i> Quiz Winners <i class="fas fa-crown"></i></h2>
@@ -424,11 +429,37 @@
             };
         }
 
+        let nextQuizTime = null;
+        let countdownInterval = null;
+
+        function startCountdown(targetTimeUtc) {
+            nextQuizTime = new Date(targetTimeUtc);
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            const update = () => {
+                const now = new Date();
+                const diff = nextQuizTime - now;
+                if (diff <= 0) {
+                    document.getElementById('next-quiz-countdown').innerText = "00:00:00";
+                    return;
+                }
+                const days = Math.floor(diff / 86400000);
+                const hours = Math.floor((diff % 86400000) / 3600000);
+                const minutes = Math.floor((diff % 3600000) / 60000);
+                const seconds = Math.floor((diff % 60000) / 1000);
+                document.getElementById('next-quiz-countdown').innerText = 
+                    `${days}d ${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+            };
+            update();
+            countdownInterval = setInterval(update, 1000);
+        }
+
         function updateUI(data) {
             const scoreList = document.getElementById('score-list');
             const statusMsg = document.getElementById('status-msg');
             const questionArea = document.getElementById('question-area');
             const optionsArea = document.getElementById('options-area');
+            const countdownSection = document.getElementById('countdown-section');
 
             if (data.leaderboard && data.leaderboard.length > 0) {
                 scoreList.innerHTML = data.leaderboard.map((p, idx) => `
@@ -446,11 +477,17 @@
                 statusMsg.innerText = data.message;
                 questionArea.style.display = 'none';
                 document.getElementById('winners-display').style.display = 'none';
+                countdownSection.style.display = 'block';
+                if (data.next_quiz_utc) startCountdown(data.next_quiz_utc);
+                
                 currentQuestionId = null;
                 if (timerInterval) clearInterval(timerInterval);
             } else if (data.status === 'finished') {
                 statusMsg.style.display = 'none';
                 questionArea.style.display = 'none';
+                countdownSection.style.display = 'block';
+                if (data.next_quiz_utc) startCountdown(data.next_quiz_utc);
+                
                 const winnersDisplay = document.getElementById('winners-display');
                 const podium = document.getElementById('podium');
                 winnersDisplay.style.display = 'block';
@@ -496,6 +533,7 @@
             } else if (data.status === 'active') {
                 statusMsg.style.display = 'none';
                 document.getElementById('winners-display').style.display = 'none';
+                countdownSection.style.display = 'none';
                 questionArea.style.display = 'block';
                 document.getElementById('current-q').innerText = data.current_question_number;
                 document.getElementById('total-q').innerText = data.total_questions;

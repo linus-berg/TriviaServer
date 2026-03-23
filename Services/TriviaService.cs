@@ -15,29 +15,74 @@ public class TriviaService
     private readonly List<WebSocket> _clients = new();
     private readonly object _lock = new();
 
+    // Configuration for automated quiz
+    private readonly DayOfWeek _scheduledDay = DayOfWeek.Friday;
+    private readonly TimeSpan _scheduledTime = new TimeSpan(14, 0, 0);
+
     public GameState GameState { get; private set; } = new();
 
     public TriviaService(IConfiguration config)
     {
         _questionDuration = config.GetValue<int>("QuizSettings:QuestionDurationSeconds", 20);
+        
+        // Load from env if available
+        var envDay = Environment.GetEnvironmentVariable("QUIZ_DAY");
+        if (Enum.TryParse<DayOfWeek>(envDay, true, out var day)) _scheduledDay = day;
+
+        var envTime = Environment.GetEnvironmentVariable("QUIZ_TIME");
+        if (TimeSpan.TryParse(envTime, out var time)) _scheduledTime = time;
+
         LoadData();
-        StartBroadcastTimer();
+        StartBackgroundTasks();
     }
 
-    private void StartBroadcastTimer()
+    private void StartBackgroundTasks()
     {
+        // State Broadcast and Auto-Start Checker
         _ = Task.Run(async () =>
         {
+            DateTime? lastAutoStart = null;
+
             while (true)
             {
                 try
                 {
+                    var now = DateTime.UtcNow;
+                    var next = GetNextScheduledTimeUtc();
+
+                    // Auto-start check: if we are within 5 seconds of the scheduled time and haven't started yet
+                    if (!GameState.IsActive && 
+                        Math.Abs((now - next).TotalSeconds) < 5 && 
+                        (lastAutoStart == null || (now - lastAutoStart.Value).TotalHours > 1))
+                    {
+                        lastAutoStart = now;
+                        StartNewQuiz();
+                    }
+
                     await BroadcastState();
                 }
                 catch (Exception) { /* Handle log if needed */ }
-                await Task.Delay(1000); // Send state every second for the timer
+                await Task.Delay(1000);
             }
         });
+    }
+
+    private DateTime GetNextScheduledTimeUtc()
+    {
+        var now = DateTime.UtcNow;
+        var next = now.Date.Add(_scheduledTime);
+
+        // Find the next occurrence of the scheduled day
+        while (next.DayOfWeek != _scheduledDay || next < now)
+        {
+            next = next.AddDays(1);
+            if (next.DayOfWeek == _scheduledDay && next.Date == now.Date && next < now)
+            {
+                // Already passed today, move to next week
+                next = next.AddDays(7);
+            }
+        }
+        return next;
     }
 
     public async Task HandleWebSocketConnection(WebSocket socket)
@@ -129,7 +174,6 @@ public class TriviaService
             .Where(q => !_history.LastQuizQuestionIds.Contains(q.Id))
             .ToList();
 
-        // If not enough questions left, reset history
         if (availableQuestions.Count < questionCount)
         {
             _history.LastQuizQuestionIds.Clear();
@@ -199,9 +243,16 @@ public class TriviaService
 
     public object GetGameState()
     {
+        var nextQuizUtc = GetNextScheduledTimeUtc();
+
         if (!GameState.IsActive && GameState.CurrentQuestionIdx == -1)
         {
-            return new { status = "waiting", message = "Grab a drink! Trivia starts soon." };
+            return new 
+            { 
+                status = "waiting", 
+                message = "Grab a drink! Trivia starts soon.",
+                next_quiz_utc = nextQuizUtc
+            };
         }
 
         // Automatic progression check
@@ -211,14 +262,18 @@ public class TriviaService
             if (elapsed.TotalSeconds >= _questionDuration)
             {
                 NextQuestion();
-                // If it finished after skipping, re-check state
                 return GetGameState();
             }
         }
 
         if (!GameState.IsActive && GameState.CurrentQuestionIdx >= GameState.CurrentQuizQuestions.Count)
         {
-            return new { status = "finished", leaderboard = GetLeaderboard() };
+            return new 
+            { 
+                status = "finished", 
+                leaderboard = GetLeaderboard(),
+                next_quiz_utc = nextQuizUtc
+            };
         }
 
         var q = GameState.CurrentQuizQuestions[GameState.CurrentQuestionIdx];
