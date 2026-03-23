@@ -4,6 +4,7 @@ using TriviaServer.Models;
 using TriviaServer.Services;
 using Microsoft.AspNetCore.Authentication.Certificate;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 
@@ -16,6 +17,29 @@ var isProd = builder.Environment.IsProduction();
 
 if (isProd)
 {
+    // Configure Certificate Forwarding based on PROXY_TYPE environment variable
+    var proxyType = Environment.GetEnvironmentVariable("PROXY_TYPE")?.ToUpper() ?? "NGINX";
+    builder.Services.AddCertificateForwarding(options =>
+    {
+        options.CertificateHeader = proxyType switch
+        {
+            "TRAEFIK" => "X-Forwarded-Tls-Client-Cert",
+            "HAPROXY" => "X-SSL-Client-Cert",
+            "APACHE" => "X-Client-Cert",
+            "NGINX" or _ => "X-SSL-CERT"
+        };
+        
+        // Handle Traefik's URL-encoded PEM if needed
+        if (proxyType == "TRAEFIK")
+        {
+            options.HeaderConverter = (headerValue) =>
+            {
+                var decoded = System.Net.WebUtility.UrlDecode(headerValue);
+                return new X509Certificate2(System.Text.Encoding.UTF8.GetBytes(decoded));
+            };
+        }
+    });
+
     builder.Services.AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
         .AddCertificate(options =>
         {
@@ -77,14 +101,15 @@ else
 
 var app = builder.Build();
 
+if (isProd)
+{
+    app.UseCertificateForwarding();
+    app.UseAuthentication();
+}
+
 app.UseWebSockets();
 app.UseDefaultFiles();
 app.UseStaticFiles();
-
-if (isProd)
-{
-    app.UseAuthentication();
-}
 app.UseAuthorization();
 
 app.Map("/ws", async (HttpContext context, TriviaService trivia) =>
